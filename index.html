@@ -70,6 +70,10 @@
                     <i data-lucide="calendar"></i>
                     <span>月間詳細</span>
                 </button>
+                <button id="tab-library" class="tab-btn">
+                    <i data-lucide="book-open"></i>
+                    <span>わが家の料理リスト</span>
+                </button>
             </div>
             
             <div class="quick-info-bar">
@@ -119,6 +123,23 @@
                         <div id="month-days-grid" class="days-grid">
                             <!-- Dynamic days will be injected here -->
                         </div>
+                    </div>
+                </section>
+                
+                <!-- 3. Dish Library View -->
+                <section id="library-view" class="view-section">
+                    <div class="library-header-bar">
+                        <div class="library-summary-desc">
+                            <h2 class="month-title" style="margin-bottom: 4px;">わが家の料理リスト</h2>
+                            <p class="panel-desc">よく作る料理をお気に入り登録しておき、カレンダーへ簡単に呼び出せます。登録した料理は自動生成にも優先的に組み込まれます。</p>
+                        </div>
+                        <button id="lib-add-dish-btn" class="primary-btn">
+                            <i data-lucide="plus"></i> 新しい料理を追加
+                        </button>
+                    </div>
+
+                    <div id="library-dishes-grid" class="library-grid">
+                        <!-- Dynamic library cards will be injected here -->
                     </div>
                 </section>
             </div>
@@ -341,7 +362,92 @@
                             <i data-lucide="sparkles"></i> <span>デモデータを読み込む</span>
                         </button>
                     </div>
+
+                    <div class="data-action-section">
+                        <h4>4. 献立の全自動作成スケジュール</h4>
+                        <p class="section-desc">おうちのルール（日曜ハンバーグ限定、同一メニュー7日回避）を完全に守って自動生成します。わが家の料理リストにお気に入りの料理がある場合は、その料理を優先して組み込みます！</p>
+                        
+                        <div class="auto-gen-buttons-row">
+                            <button id="btn-generate-month" class="primary-btn flex-center" style="background-color: var(--color-primary); box-shadow: 0 4px 12px var(--color-primary-glow); flex: 1; padding: 12px 14px; border-radius: var(--radius-md);">
+                                <i data-lucide="calendar"></i> <span id="generate-month-btn-text">1ヶ月自動生成</span>
+                            </button>
+                            <button id="btn-generate-year" class="primary-btn flex-center" style="background-color: var(--color-secondary); box-shadow: 0 4px 12px rgba(110, 141, 108, 0.3); flex: 1; padding: 12px 14px; border-radius: var(--radius-md);">
+                                <i data-lucide="chef-hat"></i> <span id="generate-year-btn-text">1年間自動生成</span>
+                            </button>
+                        </div>
+                        <span class="warning-text" style="font-size: 0.72rem; display: block; text-align: center; margin-top: 8px;">※選択している対象月・対象年の既存データは上書きされます。</span>
+                    </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Modal: Add / Edit Library Dish -->
+        <div id="lib-modal" class="modal-overlay">
+            <div class="modal-content glass animate-slide-up" style="max-width: 500px;">
+                <button class="modal-close" id="lib-modal-close-btn">&times;</button>
+                
+                <div class="modal-header">
+                    <div class="modal-icon-title">
+                        <i data-lucide="book-open" class="modal-icon-color"></i>
+                        <h3 id="lib-modal-title">料理リストに登録</h3>
+                    </div>
+                </div>
+                
+                <form id="lib-form" onsubmit="return false;">
+                    <input type="hidden" id="lib-form-id">
+                    
+                    <div class="form-group">
+                        <label for="lib-form-title" class="form-label">料理名 <span class="required">*</span></label>
+                        <input type="text" id="lib-form-title" class="form-input" placeholder="例: 特製豚の生姜焼き" required autocomplete="off">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">食事のタイミング</label>
+                        <div class="meal-type-selector">
+                            <label class="meal-type-option">
+                                <input type="radio" name="lib-meal-type" value="breakfast">
+                                <span class="meal-badge-btn breakfast">朝食</span>
+                            </label>
+                            <label class="meal-type-option">
+                                <input type="radio" name="lib-meal-type" value="lunch">
+                                <span class="meal-badge-btn lunch">昼食</span>
+                            </label>
+                            <label class="meal-type-option">
+                                <input type="radio" name="lib-meal-type" value="dinner" checked>
+                                <span class="meal-badge-btn dinner">夕食</span>
+                            </label>
+                            <label class="meal-type-option">
+                                <input type="radio" name="lib-meal-type" value="snack">
+                                <span class="meal-badge-btn snack">おやつ</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="lib-form-url" class="form-label">レシピのURL</label>
+                        <input type="url" id="lib-form-url" class="form-input" placeholder="例: https://cookpad.com/... など">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="lib-form-notes" class="form-label">メモ・食材リスト (お買い物リスト連動)</label>
+                        <textarea id="lib-form-notes" class="form-textarea" placeholder="例:
+- 豚ひき肉 200g
+- ニラ 1袋
+※ 行頭に「- 」を付けると自動でお買い物リストに抽出されます！"></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="btn-delete-lib" class="danger-btn flex-center" style="display: none;">
+                            <i data-lucide="trash-2"></i> <span>削除する</span>
+                        </button>
+                        <div class="right-actions">
+                            <button type="button" id="btn-cancel-lib" class="secondary-btn">キャンセル</button>
+                            <button type="submit" id="btn-save-lib" class="primary-btn flex-center">
+                                <i data-lucide="save"></i> <span>保存する</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
 

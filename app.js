@@ -11,6 +11,7 @@ let state = {
     currentDateKey: '',
     viewMode: 'year', // 'year' or 'month'
     menus: {}, // Key: 'YYYY-MM-DD', Value: { title, type, url, notes }
+    dishLibrary: [], // Array of { id, title, type, url, notes, sundayOnly }
     shoppingList: [], // Array of { id, text, checked, dateKey }
     sidebarTab: 'share', // 'share' or 'shopping'
     theme: 'light'
@@ -105,6 +106,7 @@ function loadStateFromStorage() {
             const parsed = JSON.parse(saved);
             state.menus = parsed.menus || {};
             state.shoppingList = parsed.shoppingList || [];
+            state.dishLibrary = parsed.dishLibrary || [];
             
             // Default to current calendar year/month
             const now = new Date();
@@ -120,6 +122,7 @@ function saveStateToStorage() {
     const dataToSave = {
         menus: state.menus,
         shoppingList: state.shoppingList,
+        dishLibrary: state.dishLibrary,
         currentYear: state.currentYear,
         currentMonth: state.currentMonth
     };
@@ -128,10 +131,10 @@ function saveStateToStorage() {
 
 // 5. THEME TOGGLE
 function initTheme() {
+    // Always default to light mode; only switch to dark if explicitly saved
     const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
-    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+    if (savedTheme === 'dark') {
         state.theme = 'dark';
         document.documentElement.setAttribute('data-theme', 'dark');
         document.querySelector('.theme-icon-dark').style.display = 'none';
@@ -167,9 +170,11 @@ function initEventListeners() {
     // View Switch Tabs
     const tabYear = document.getElementById('tab-year');
     const tabMonth = document.getElementById('tab-month');
+    const tabLibrary = document.getElementById('tab-library');
     
     tabYear.addEventListener('click', () => switchViewMode('year'));
     tabMonth.addEventListener('click', () => switchViewMode('month'));
+    tabLibrary.addEventListener('click', () => switchViewMode('library'));
     
     // Year Selector Navigation
     document.getElementById('prev-year').addEventListener('click', () => navigateYear(-1));
@@ -201,6 +206,9 @@ function initEventListeners() {
     formTitleInput.addEventListener('input', (e) => {
         showSuggestions(e.target.value);
         triggerValidation();
+    });
+    formTitleInput.addEventListener('focus', (e) => {
+        if (e.target.value === '') showSuggestions('');
     });
     
     // Close suggestions dropdown when clicking outside
@@ -268,6 +276,15 @@ function initEventListeners() {
     document.getElementById('data-modal-close-btn').addEventListener('click', closeDataModal);
     document.getElementById('btn-export-data').addEventListener('click', exportDataJson);
     document.getElementById('btn-load-demo').addEventListener('click', loadDemoDataClick);
+    document.getElementById('btn-generate-year').addEventListener('click', generateOneYearMenusClick);
+    document.getElementById('btn-generate-month').addEventListener('click', generateOneMonthMenusClick);
+    
+    // Library dish modal
+    document.getElementById('lib-add-dish-btn').addEventListener('click', () => openLibModal(null));
+    document.getElementById('lib-modal-close-btn').addEventListener('click', closeLibModal);
+    document.getElementById('btn-cancel-lib').addEventListener('click', closeLibModal);
+    document.getElementById('btn-delete-lib').addEventListener('click', deleteCurrentLibDish);
+    document.getElementById('lib-form').addEventListener('submit', saveLibForm);
     
     // Import file handle
     const fileInput = document.getElementById('import-file-input');
@@ -290,21 +307,27 @@ function switchViewMode(mode) {
     
     const tabYear = document.getElementById('tab-year');
     const tabMonth = document.getElementById('tab-month');
+    const tabLibrary = document.getElementById('tab-library');
     const secYear = document.getElementById('year-view');
     const secMonth = document.getElementById('month-view');
+    const secLibrary = document.getElementById('library-view');
+    
+    // Reset all
+    [tabYear, tabMonth, tabLibrary].forEach(t => t.classList.remove('active'));
+    [secYear, secMonth, secLibrary].forEach(s => s.classList.remove('active'));
     
     if (mode === 'year') {
         tabYear.classList.add('active');
-        tabMonth.classList.remove('active');
         secYear.classList.add('active');
-        secMonth.classList.remove('active');
         renderYearView();
-    } else {
-        tabYear.classList.remove('active');
+    } else if (mode === 'month') {
         tabMonth.classList.add('active');
-        secYear.classList.remove('active');
         secMonth.classList.add('active');
         renderMonthView();
+    } else if (mode === 'library') {
+        tabLibrary.classList.add('active');
+        secLibrary.classList.add('active');
+        renderLibraryView();
     }
 }
 
@@ -338,6 +361,8 @@ function navigateMonth(dir) {
 function updateYearDisplay() {
     document.getElementById('current-year').textContent = state.currentYear;
     document.getElementById('month-title-display').textContent = `${state.currentYear}年 ${state.currentMonth + 1}月`;
+    const genYearDisp = document.getElementById('generate-year-display');
+    if (genYearDisp) genYearDisp.textContent = state.currentYear;
 }
 
 function updateRegisteredCount() {
@@ -667,6 +692,75 @@ function openMenuModal(dateKey) {
 function closeMenuModal() {
     document.getElementById('menu-modal').classList.remove('active');
 }
+
+// Show suggestions from dish library + recent menus
+function showSuggestions(query) {
+    const suggestionsBox = document.getElementById('title-suggestions');
+    
+    // Build candidate list: library dishes first, then recent menus
+    const candidates = [];
+    
+    // 1. From dish library
+    state.dishLibrary.forEach(dish => {
+        if (!candidates.some(c => c.title === dish.title)) {
+            candidates.push({ title: dish.title, type: dish.type, url: dish.url, notes: dish.notes, fromLibrary: true });
+        }
+    });
+    
+    // 2. From existing menus (recent ones)
+    const recentMenuTitles = Object.values(state.menus)
+        .map(m => m.title)
+        .filter((t, i, arr) => arr.indexOf(t) === i) // unique
+        .slice(-20); // last 20 unique titles
+    recentMenuTitles.forEach(title => {
+        if (!candidates.some(c => c.title === title)) {
+            const sample = Object.values(state.menus).find(m => m.title === title);
+            candidates.push({ title, type: sample?.type || 'dinner', url: sample?.url || '', notes: sample?.notes || '', fromLibrary: false });
+        }
+    });
+    
+    const filtered = query
+        ? candidates.filter(c => c.title.toLowerCase().includes(query.toLowerCase()))
+        : candidates.slice(0, 8);
+    
+    if (filtered.length === 0) {
+        suggestionsBox.style.display = 'none';
+        return;
+    }
+    
+    suggestionsBox.innerHTML = '';
+    filtered.slice(0, 8).forEach(dish => {
+        const item = document.createElement('div');
+        item.className = 'suggestion-item';
+        
+        const icon = dish.fromLibrary ? '📚' : '📅';
+        const badge = dish.fromLibrary
+            ? `<span class="suggestion-badge lib">料理リスト</span>`
+            : `<span class="suggestion-badge recent">最近</span>`;
+        
+        item.innerHTML = `
+            <span class="suggestion-icon">${icon}</span>
+            <span class="suggestion-title">${dish.title}</span>
+            ${badge}
+        `;
+        item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            document.getElementById('form-title').value = dish.title;
+            if (dish.url) document.getElementById('form-url').value = dish.url;
+            if (dish.notes) document.getElementById('form-notes').value = dish.notes;
+            const radio = document.querySelector(`input[name="meal-type"][value="${dish.type}"]`);
+            if (radio) radio.checked = true;
+            const testBtn = document.getElementById('btn-test-url');
+            if (dish.url && dish.url.trim()) testBtn.removeAttribute('disabled');
+            suggestionsBox.style.display = 'none';
+            triggerValidation();
+        });
+        suggestionsBox.appendChild(item);
+    });
+    
+    suggestionsBox.style.display = 'block';
+}
+
 
 // Validation logic adhering to the specific user rules
 function validateMenu(dateKey, title) {
@@ -1261,4 +1355,497 @@ function showToastNotification(message) {
         toast.style.transition = 'opacity 0.4s ease';
         setTimeout(() => toast.remove(), 400);
     }, 3200);
+}
+
+// ==========================================================================
+// 17.5 DISH LIBRARY MANAGEMENT
+// ==========================================================================
+
+function renderLibraryView() {
+    const grid = document.getElementById('library-dishes-grid');
+    grid.innerHTML = '';
+    
+    if (state.dishLibrary.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'library-empty-state';
+        empty.innerHTML = `
+            <div class="empty-icon">🍳</div>
+            <h3>料理リストはまだ空です</h3>
+            <p>「新しい料理を追加」ボタンからよく作るお隰〜お得意料理を登録してください。登録した料理は自動予測やカレンダー追加時に優先的に使われます。</p>
+        `;
+        grid.appendChild(empty);
+        return;
+    }
+    
+    state.dishLibrary.forEach(dish => {
+        const card = document.createElement('div');
+        card.className = 'library-dish-card animate-fade-in';
+        
+        const mealLabel = getMealLabel(dish.type);
+        const mealClass = dish.type;
+        const isSundayOnly = dish.sundayOnly;
+        
+        card.innerHTML = `
+            <div class="lib-card-header">
+                <div class="lib-card-badges">
+                    <span class="meal-badge ${mealClass}">${mealLabel}</span>
+                    ${isSundayOnly ? '<span class="meal-badge sunday-only">日曜限定</span>' : ''}
+                </div>
+                <div class="lib-card-actions">
+                    <button class="lib-quick-add-btn" title="カレンダーに追加" data-id="${dish.id}">
+                        <i data-lucide="calendar-plus"></i>
+                    </button>
+                    <button class="lib-edit-btn" title="編集" data-id="${dish.id}">
+                        <i data-lucide="edit-3"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="lib-card-title">${dish.title}</div>
+            ${dish.url ? `<a href="${dish.url}" target="_blank" class="lib-card-url" onclick="event.stopPropagation()">
+                <i data-lucide="external-link"></i> レシピを見る
+            </a>` : '<div class="lib-card-url-empty">レシピURLなし</div>'}
+            ${dish.notes ? `<div class="lib-card-notes">${dish.notes.substring(0, 60)}${dish.notes.length > 60 ? '…' : ''}</div>` : ''}
+        `;
+        
+        // Edit button
+        card.querySelector('.lib-edit-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            openLibModal(dish.id);
+        });
+        
+        // Quick add to calendar button
+        card.querySelector('.lib-quick-add-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            quickAddLibDishToCalendar(dish);
+        });
+        
+        grid.appendChild(card);
+    });
+    
+    lucide.createIcons();
+}
+
+function openLibModal(dishId) {
+    const modal = document.getElementById('lib-modal');
+    document.getElementById('lib-form-id').value = dishId || '';
+    
+    if (dishId) {
+        const dish = state.dishLibrary.find(d => d.id === dishId);
+        if (!dish) return;
+        document.getElementById('lib-modal-title').textContent = '料理を編集';
+        document.getElementById('lib-form-title').value = dish.title;
+        document.getElementById('lib-form-url').value = dish.url || '';
+        document.getElementById('lib-form-notes').value = dish.notes || '';
+        const radio = document.querySelector(`input[name="lib-meal-type"][value="${dish.type}"]`);
+        if (radio) radio.checked = true;
+        document.getElementById('btn-delete-lib').style.display = 'flex';
+    } else {
+        document.getElementById('lib-modal-title').textContent = '料理リストに登録';
+        document.getElementById('lib-form-title').value = '';
+        document.getElementById('lib-form-url').value = '';
+        document.getElementById('lib-form-notes').value = '';
+        document.querySelector('input[name="lib-meal-type"][value="dinner"]').checked = true;
+        document.getElementById('btn-delete-lib').style.display = 'none';
+    }
+    
+    modal.classList.add('active');
+    document.getElementById('lib-form-title').focus();
+    lucide.createIcons();
+}
+
+function closeLibModal() {
+    document.getElementById('lib-modal').classList.remove('active');
+}
+
+function saveLibForm() {
+    const id = document.getElementById('lib-form-id').value;
+    const title = document.getElementById('lib-form-title').value.trim();
+    const url = document.getElementById('lib-form-url').value.trim();
+    const notes = document.getElementById('lib-form-notes').value.trim();
+    const type = document.querySelector('input[name="lib-meal-type"]:checked').value;
+    
+    if (!title) return;
+    
+    if (id) {
+        // Update existing
+        const idx = state.dishLibrary.findIndex(d => d.id === id);
+        if (idx !== -1) {
+            state.dishLibrary[idx] = { ...state.dishLibrary[idx], title, type, url, notes };
+        }
+    } else {
+        // Add new
+        const newDish = {
+            id: `lib-${Date.now()}`,
+            title, type, url, notes,
+            sundayOnly: title.includes('ハンバーグ')
+        };
+        state.dishLibrary.push(newDish);
+    }
+    
+    saveStateToStorage();
+    closeLibModal();
+    renderLibraryView();
+    showToastNotification(`「${title}」を料理リストに登録しました！`);
+}
+
+function deleteCurrentLibDish() {
+    const id = document.getElementById('lib-form-id').value;
+    if (!id) return;
+    const dish = state.dishLibrary.find(d => d.id === id);
+    if (!dish) return;
+    if (confirm(`「${dish.title}」を料理リストから削除しますか？`)) {
+        state.dishLibrary = state.dishLibrary.filter(d => d.id !== id);
+        saveStateToStorage();
+        closeLibModal();
+        renderLibraryView();
+        showToastNotification('料理をリストから削除しました。');
+    }
+}
+
+function quickAddLibDishToCalendar(dish) {
+    // Switch to month view and open modal pre-filled with dish info
+    switchViewMode('month');
+    
+    // Find next available date in current month
+    const today = new Date();
+    let targetDate;
+    if (today.getFullYear() === state.currentYear && today.getMonth() === state.currentMonth) {
+        targetDate = today;
+    } else {
+        targetDate = new Date(state.currentYear, state.currentMonth, 1);
+    }
+    
+    // Find next day without a menu entry
+    const totalDays = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
+    for (let d = targetDate.getDate(); d <= totalDays; d++) {
+        const checkDate = new Date(state.currentYear, state.currentMonth, d);
+        const dateKey = getDateKey(checkDate);
+        if (!state.menus[dateKey]) {
+            // If dish is hamburger-only-Sunday and today is not Sunday, skip to next Sunday
+            if (dish.title.includes('ハンバーグ') && checkDate.getDay() !== 0) {
+                continue;
+            }
+            openMenuModal(dateKey);
+            // Pre-fill form after modal is open
+            setTimeout(() => {
+                document.getElementById('form-title').value = dish.title;
+                document.getElementById('form-url').value = dish.url || '';
+                document.getElementById('form-notes').value = dish.notes || '';
+                const radio = document.querySelector(`input[name="meal-type"][value="${dish.type}"]`);
+                if (radio) radio.checked = true;
+                const testBtn = document.getElementById('btn-test-url');
+                if (dish.url) testBtn.removeAttribute('disabled');
+                triggerValidation();
+                lucide.createIcons();
+            }, 50);
+            return;
+        }
+    }
+    
+    // If no available date, just open the modal for the first day
+    const firstKey = getDateKey(new Date(state.currentYear, state.currentMonth, 1));
+    openMenuModal(firstKey);
+    setTimeout(() => {
+        document.getElementById('form-title').value = dish.title;
+        document.getElementById('form-url').value = dish.url || '';
+        document.getElementById('form-notes').value = dish.notes || '';
+        const radio = document.querySelector(`input[name="meal-type"][value="${dish.type}"]`);
+        if (radio) radio.checked = true;
+        triggerValidation();
+    }, 50);
+}
+
+// ==========================================================================
+// 17.6 1-MONTH AUTO-GENERATOR
+// ==========================================================================
+
+function generateOneMonthMenusClick() {
+    const year = state.currentYear;
+    const month = state.currentMonth;
+    const monthLabel = `${year}年${month + 1}月`;
+    
+    if (confirm(`${monthLabel}の一ザ月分の献立を自動生成しますか？\n\n　ハンバーグは日曜日限定\n　同一メニューは最低7日間隔\n　お気に入り料理リストの料理を優先使用\n\n※${monthLabel}の既存データは上書きされます。`)) {
+        generateOneMonthMenus(year, month);
+        closeDataModal();
+    }
+}
+
+function generateOneMonthMenus(year, month) {
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const monthMenus = {};
+    const recentHistory = []; // track last 7 dishes
+    
+    // Build dish pool: library dishes take priority
+    const libPool = state.dishLibrary.filter(d => !d.title.includes('ハンバーグ'));
+    const libHamburgers = state.dishLibrary.filter(d => d.title.includes('ハンバーグ'));
+    
+    // Merge with default pools (library first)
+    const weekdayPool = [
+        ...libPool,
+        ...WEEKDAY_DISHES.filter(d => !libPool.some(l => l.title === d.title))
+    ];
+    const hamburgerPool = [
+        ...libHamburgers,
+        ...SUNDAY_HAMBURGERS.filter(d => !libHamburgers.some(l => l.title === d.title))
+    ];
+    const sundayPool = [
+        ...SUNDAY_SPECIALS
+    ];
+    
+    let burgerIdx = 0;
+    let specialIdx = 0;
+    
+    for (let d = 1; d <= totalDays; d++) {
+        const currentDate = new Date(year, month, d);
+        const dateKey = getDateKey(currentDate);
+        const dayOfWeek = currentDate.getDay();
+        
+        let chosenDish = null;
+        
+        if (dayOfWeek === 0) {
+            // Sunday: alternate hamburger and special
+            const isBurgerSunday = (Math.floor((d + 6) / 7) % 2 === 0);
+            if (isBurgerSunday && hamburgerPool.length > 0) {
+                for (let i = 0; i < hamburgerPool.length; i++) {
+                    const idx = (burgerIdx + i) % hamburgerPool.length;
+                    const dish = hamburgerPool[idx];
+                    if (!recentHistory.includes(dish.title)) {
+                        chosenDish = dish;
+                        burgerIdx = (idx + 1) % hamburgerPool.length;
+                        break;
+                    }
+                }
+            }
+            if (!chosenDish) {
+                for (let i = 0; i < sundayPool.length; i++) {
+                    const idx = (specialIdx + i) % sundayPool.length;
+                    const dish = sundayPool[idx];
+                    if (!recentHistory.includes(dish.title)) {
+                        chosenDish = dish;
+                        specialIdx = (idx + 1) % sundayPool.length;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!chosenDish) {
+            const startOffset = Math.floor(Math.random() * weekdayPool.length);
+            for (let i = 0; i < weekdayPool.length; i++) {
+                const idx = (startOffset + i) % weekdayPool.length;
+                const dish = weekdayPool[idx];
+                if (!recentHistory.includes(dish.title)) {
+                    chosenDish = dish;
+                    break;
+                }
+            }
+            if (!chosenDish) chosenDish = weekdayPool[0] || WEEKDAY_DISHES[0];
+        }
+        
+        monthMenus[dateKey] = {
+            title: chosenDish.title,
+            type: chosenDish.type,
+            url: chosenDish.url || '',
+            notes: chosenDish.notes || ''
+        };
+        
+        recentHistory.push(chosenDish.title);
+        if (recentHistory.length > 7) recentHistory.shift();
+    }
+    
+    // Clear existing month data
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}-`;
+    for (const key of Object.keys(state.menus)) {
+        if (key.startsWith(monthPrefix)) delete state.menus[key];
+    }
+    
+    state.menus = { ...state.menus, ...monthMenus };
+    state.shoppingList = [];
+    saveStateToStorage();
+    updateRegisteredCount();
+    
+    if (state.viewMode === 'year') renderYearView();
+    else renderMonthView();
+    
+    generateShareText();
+    generateShoppingList();
+    
+    const monthLabel = `${year}年${month + 1}月`;
+    showToastNotification(`${monthLabel}（${totalDays}日分）の献立を自動生成しました！🥗`);
+}
+
+// ==========================================================================
+// 17. 1-YEAR AUTO-GENERATOR CONSTRAINT SOLVER
+// ==========================================================================
+
+const SUNDAY_HAMBURGERS = [
+    { title: 'こだわりデミグラスハンバーグ', type: 'dinner', url: 'https://cookpad.com/recipe/123456', notes: '- 合挽き肉 300g\n- 玉ねぎ 1個\n- 卵 1個\n- パン粉\n※日曜日の特別ディナー！' },
+    { title: '和風おろしハンバーグ', type: 'dinner', url: 'https://www.kurashiru.com/recipes/b94a821e-cde9-4828-963d-4c3e8be8eeaa', notes: '- 合挽き肉 300g\n- 大根 1/4本\n- 大葉 4枚\n- ポン酢\n※さっぱり和風の特製ハンバーグ！' },
+    { title: 'とろけるチーズインハンバーグ', type: 'dinner', url: 'https://www.kurashiru.com/recipes/1be7cfb1-97b7-4cbe-b4f0-ec7b4f535398', notes: '- 合挽き肉 300g\n- とろけるチーズ 4枚\n- 玉ねぎ 1個\n- 卵 1個\n※中から溢れ出す濃厚チーズ！' },
+    { title: '本格デミ煮込みハンバーグ', type: 'dinner', url: 'https://www.kurashiru.com/recipes/797a7cb1-97b7-4cbe-b4f0-ec7b4f535398', notes: '- 合挽き肉 300g\n- 玉ねぎ 1個\n- しめじ 1/2パック\n- デミグラスソース缶\n※コトコト煮込んだジューシー仕上げ！' }
+];
+
+const SUNDAY_SPECIALS = [
+    { title: 'お家で贅沢すき焼き丼', type: 'dinner', url: 'https://www.kurashiru.com/recipes/a6c6e036-7ee6-4e5b-b9d9-bb59146fde8c', notes: '- 牛薄切り肉 250g\n- 白ねぎ 1本\n- 焼き豆腐 1/2丁\n- しらたき\n- 卵\n※休日の団らんすき焼き！' },
+    { title: '特製海鮮ちらし寿司', type: 'dinner', url: 'https://www.kurashiru.com/recipes/ff3fcdb2-8ad6-407e-9081-39fae61bd680', notes: '- 寿司飯 2合\n- マグロ、サーモン 刺身\n- いくら\n- 錦糸卵\n※彩り豊かな手作りちらし！' },
+    { title: '鉄板プレートお好み焼き', type: 'dinner', url: 'https://www.kurashiru.com/recipes/76a6b571-0818-4bf8-befc-fccae5e69e47', notes: '- お好み焼き粉\n- キャベツ 1/2個\n- 豚バラ肉 150g\n- 天かす\n- 紅生姜' },
+    { title: '本格おうち手作りピザ', type: 'dinner', url: 'https://www.kurashiru.com/recipes/5021e102-39c2-4809-a1b1-28565a0b731e', notes: '- ピザクラスト 2枚\n- ピザソース\n- ベーコン 4枚\n- ミニトマト 4個\n- ピーマン 1個\n- チーズ' }
+];
+
+const WEEKDAY_DISHES = [
+    { title: '豚の生姜焼き定食', type: 'dinner', url: 'https://park.ajinomoto.co.jp/recipe/card/703125/', notes: '- 豚薄切り肉 200g\n- 玉ねぎ 1/2個\n- キャベツ\n- 生姜' },
+    { title: 'ジューシーとり唐揚げ', type: 'dinner', url: 'https://www.kurashiru.com/recipes/d68bfb84-6019-4824-814d-fa7d53ce5270', notes: '- 鶏もも肉 2枚\n- 片栗粉\n- レモン\n- キャベツ' },
+    { title: 'ぶりの照り焼き', type: 'dinner', url: 'https://www.kurashiru.com/recipes/cc612a44-dfa0-47de-8bde-7d9be7bd65f2', notes: '- ぶり切れ身 2枚\n- ししとう 4本\n- 生姜' },
+    { title: 'ふっくらサバの塩焼き', type: 'dinner', url: 'https://park.ajinomoto.co.jp/recipe/card/706592/', notes: '- サバ切り身 2枚\n- 大根 1/4本\n- 味噌汁の具' },
+    { title: 'ふわふわ卵のオムライス', type: 'lunch', url: 'https://www.kagome.co.jp/products/recipe/M10385/', notes: '- 鶏もも肉 100g\n- 玉ねぎ 1/2個\n- 卵 4個\n- ケチャップ' },
+    { title: '特製チキンカレー', type: 'dinner', url: 'https://www.sbfoods.co.jp/recipe/detail/01460.html', notes: '- 鶏もも肉 300g\n- 玉ねぎ 2個\n- じゃがいも 2個\n- カレールー' },
+    { title: '和風おろしきのこパスタ', type: 'dinner', url: 'https://recipe.rakuten.co.jp/recipe/1860006764/', notes: '- スパゲティ 200g\n- しめじ 1パック\n- エリンギ 1袋\n- 大根おろし' },
+    { title: '具だくさん豚汁定食', type: 'dinner', url: 'https://www.kurashiru.com/recipes/797a7cb1-97b7-4cbe-b4f0-ec7b4f535398', notes: '- 豚バラ肉 150g\n- 大根 1/4本\n- 人参 1/2本\n- ごぼう 1/2本' },
+    { title: 'とろ〜り親子丼', type: 'dinner', url: 'https://www.mizkan.co.jp/recipe/detail/?menu_id=14972', notes: '- 鶏もも肉 200g\n- 卵 3個\n- 三つ葉\n- 玉ねぎ 1/2個' },
+    { title: '本格麻婆豆腐定食', type: 'dinner', url: 'https://www.kurashiru.com/recipes/ff3fcdb2-8ad6-407e-9081-39fae61bd670', notes: '- 木綿豆腐 1丁\n- 豚ひき肉 150g\n- 長ねぎ 1/2本\n- 豆板醤' },
+    { title: '回鍋肉（ホイコーロー）', type: 'dinner', url: 'https://park.ajinomoto.co.jp/recipe/card/701103/', notes: '- 豚バラ薄切り肉 200g\n- キャベツ 1/4個\n- ピーマン 2個\n- 甜麺醤' },
+    { title: '鮭のバターホイル焼き', type: 'dinner', url: 'https://www.kurashiru.com/recipes/76a6b571-0818-4bf8-befc-fccae5e69e46', notes: '- 生鮭切れ身 2枚\n- しめじ 1/2パック\n- 玉ねぎ 1/4個\n- バターン 20g' },
+    { title: '手作り焼き餃子定食', type: 'dinner', url: 'https://www.kurashiru.com/recipes/5021e102-39c2-4809-a1b1-28565a0b731d', notes: '- 豚ひき肉 200g\n- キャベツ 2枚\n- ニラ 1/2袋\n- 餃子の皮 30枚' },
+    { title: 'さっぱり冷やし中華', type: 'lunch', url: 'https://www.mizkan.co.jp/recipe/detail/?menu_id=10202', notes: '- 冷やし中華麺 2食\n- きゅうり 1/2本\n- ハム 4枚\n- 錦糸卵' },
+    { title: 'あつあつエビグラタン', type: 'dinner', url: 'https://www.kurashiru.com/recipes/cfb86ea6-2187-43ca-a386-3507fa759080', notes: '- むきエビ 100g\n- マカロニ 80g\n- 玉ねぎ 1/2個\n- ホワイトソース缶' },
+    { title: 'とろけるハヤシライス', type: 'dinner', url: 'https://www.sbfoods.co.jp/recipe/detail/02396.html', notes: '- 牛薄切り肉 200g\n- 玉ねぎ 1個\n- マッシュルーム 1パック\n- ハヤシルー' },
+    { title: '牛肉スタミナ炒め定食', type: 'dinner', url: 'https://www.kurashiru.com/recipes/cc4e410b-eead-4cf5-8025-a131804f35e9', notes: '- 牛こま切れ肉 200g\n- ニラ 1袋\n- もやし 1袋\n- ニンニク' },
+    { title: '白身魚のサクサクフライ', type: 'dinner', url: 'https://www.kurashiru.com/recipes/85055b85-5b4d-4cb0-bc78-75c1d35508a8', notes: '- 白身魚切り身 2切れ\n- 小麦粉、パン粉\n- タルタルソース\n- キャベツ' },
+    { title: '本格チンジャオロース', type: 'dinner', url: 'https://park.ajinomoto.co.jp/recipe/card/701099/', notes: '- 豚肩ロース肉 200g\n- ピーマン 4個\n- たけのこ水煮 100g\n- オイスターソース' },
+    { title: '鶏肉とカシューナッツ炒め', type: 'dinner', url: 'https://www.kurashiru.com/recipes/20a6e036-7ee6-4e5b-b9d9-bb59146fde8c', notes: '- 鶏もも肉 200g\n- カシューナッツ 50g\n- ピーマン 2個\n- 玉ねぎ 1/2個' },
+    { title: 'おうちビビンバ丼', type: 'dinner', url: 'https://www.kurashiru.com/recipes/10f76985-7036-4fc6-b7ff-378873eb8b22', notes: '- 牛ひき肉 150g\n- ほうれん草 1/2袋\n- もやし 1/2袋\n- キムチ\n- コチュジャン' },
+    { title: 'ぷりぷりエビチリ定食', type: 'dinner', url: 'https://park.ajinomoto.co.jp/recipe/card/700810/', notes: '- むきエビ 180g\n- 白ねぎ 1/2本\n- 生姜、ニンニク\n- チリソース' },
+    { title: '和風ポークソテー', type: 'dinner', url: 'https://www.kurashiru.com/recipes/ff3bc3b3-85bb-4c28-98e6-1216aeb7ef5c', notes: '- 豚ロース厚切り肉 2枚\n- しめじ 1/2パック\n- ポン酢' },
+    { title: '彩りタコライス', type: 'lunch', url: 'https://www.kurashiru.com/recipes/b0e5ee05-64ad-4c5e-aa78-0cf7df57cf89', notes: '- 合挽き肉 150g\n- レタス 2枚\n- トマト 1/2個\n- チーズ\n- チリパウダー' },
+    { title: 'あっさり冷やしきつねうどん', type: 'lunch', url: 'https://www.kurashiru.com/recipes/d0e5ee05-64ad-4c5e-aa78-0cf7df57cf89', notes: '- うどん生麺 2玉\n- 油揚げ 2枚\n- かまぼこ 4切れ\n- ねぎ' }
+];
+
+function generateOneYearMenusClick() {
+    if (confirm(`${state.currentYear}年の365日分の献立を自動生成しますか？\n\n【ルール】\n・ハンバーグは日曜日限定\n・同一メニューは最低1週間（7日間）空ける\n・すべての献立にレシピURLとお買い物用の食材リストがセットされます。\n\n※現在登録されている${state.currentYear}年の既存データはすべて上書きされます。よろしければOKを押してください。`)) {
+        generateOneYearMenus(state.currentYear);
+    }
+}
+
+function generateOneYearMenus(year) {
+    const yearMenus = {};
+    const recentHistory = []; // Keeps track of last 7 unique dish titles
+    
+    // Total days in that year
+    const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+    const totalDays = isLeap ? 366 : 365;
+    
+    // Build priority pools from dish library
+    const libPool = state.dishLibrary.filter(d => !d.title.includes('ハンバーグ'));
+    const libHamburgers = state.dishLibrary.filter(d => d.title.includes('ハンバーグ'));
+    
+    const weekdayPool = [
+        ...libPool,
+        ...WEEKDAY_DISHES.filter(d => !libPool.some(l => l.title === d.title))
+    ];
+    const hamburgerPool = [
+        ...libHamburgers,
+        ...SUNDAY_HAMBURGERS.filter(d => !libHamburgers.some(l => l.title === d.title))
+    ];
+    
+    let burgerIndex = 0;
+    let specialIndex = 0;
+    
+    for (let d = 1; d <= totalDays; d++) {
+        const currentDate = new Date(year, 0, d);
+        const dateKey = getDateKey(currentDate);
+        const dayOfWeek = currentDate.getDay(); // 0 is Sunday
+        
+        let chosenDish = null;
+        
+        if (dayOfWeek === 0) {
+            // Sunday
+            // Alternate Sunday Hamburgers and Sunday Specials to give dynamic variety
+            const isBurgerSunday = (Math.floor(d / 7) % 2 === 0);
+            
+            if (isBurgerSunday) {
+                // Find a Hamburger variant not used in last 7 days
+                for (let i = 0; i < hamburgerPool.length; i++) {
+                    const idx = (burgerIndex + i) % hamburgerPool.length;
+                    const dish = hamburgerPool[idx];
+                    if (!recentHistory.includes(dish.title)) {
+                        chosenDish = dish;
+                        burgerIndex = (idx + 1) % hamburgerPool.length;
+                        break;
+                    }
+                }
+            }
+            
+            // Fallback or non-burger Sunday
+            if (!chosenDish) {
+                for (let i = 0; i < SUNDAY_SPECIALS.length; i++) {
+                    const idx = (specialIndex + i) % SUNDAY_SPECIALS.length;
+                    const dish = SUNDAY_SPECIALS[idx];
+                    if (!recentHistory.includes(dish.title)) {
+                        chosenDish = dish;
+                        specialIndex = (idx + 1) % SUNDAY_SPECIALS.length;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Weekday or Fallback
+        if (!chosenDish) {
+            const startOffset = Math.floor(Math.random() * weekdayPool.length);
+            for (let i = 0; i < weekdayPool.length; i++) {
+                const idx = (startOffset + i) % weekdayPool.length;
+                const dish = weekdayPool[idx];
+                if (!recentHistory.includes(dish.title)) {
+                    chosenDish = dish;
+                    break;
+                }
+            }
+            
+            // Ultimate fallback (safety first)
+            if (!chosenDish) {
+                chosenDish = weekdayPool[0] || WEEKDAY_DISHES[0];
+            }
+        }
+        
+        // Assign to menus object
+        yearMenus[dateKey] = {
+            title: chosenDish.title,
+            type: chosenDish.type,
+            url: chosenDish.url || '',
+            notes: chosenDish.notes || ''
+        };
+        
+        // Maintain history (max 7 items to enforce 7-day separation)
+        recentHistory.push(chosenDish.title);
+        if (recentHistory.length > 7) {
+            recentHistory.shift(); // Remove oldest
+        }
+    }
+    
+    // Clear out current year's keys first from state.menus
+    for (const key of Object.keys(state.menus)) {
+        if (key.startsWith(`${year}-`)) {
+            delete state.menus[key];
+        }
+    }
+    
+    // Merge new menus
+    state.menus = { ...state.menus, ...yearMenus };
+    state.shoppingList = []; // Clear shopping list to re-extract
+    
+    saveStateToStorage();
+    updateRegisteredCount();
+    
+    // Re-render current view
+    if (state.viewMode === 'year') {
+        renderYearView();
+    } else {
+        renderMonthView();
+    }
+    
+    generateShareText();
+    generateShoppingList();
+    closeDataModal();
+    
+    showToastNotification(`${year}年（${totalDays}日分）の献立を全自動生成しました！🥗`);
 }
