@@ -1460,6 +1460,21 @@ textarea#share-text-output {
     box-shadow: 0 2px 8px rgba(123, 31, 162, 0.15);
 }
 
+/* Custom Checked states for Day Limits */
+.meal-type-option input:checked + .meal-badge-btn.limit-none {
+    background: var(--color-secondary-light);
+    color: var(--color-secondary);
+    border-color: var(--color-secondary);
+    box-shadow: 0 2px 8px rgba(110, 141, 108, 0.15);
+}
+
+.meal-type-option input:checked + .meal-badge-btn.limit-sunday {
+    background: #fde8e8;
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+    box-shadow: 0 2px 8px rgba(217, 83, 79, 0.15);
+}
+
 /* Interactive Validation warning box inside modal */
 .validation-alerts {
     background: #fff8e1;

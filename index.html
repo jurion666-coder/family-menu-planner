@@ -424,6 +424,20 @@
                     </div>
                     
                     <div class="form-group">
+                        <label class="form-label">曜日制限</label>
+                        <div class="meal-type-selector" style="grid-template-columns: repeat(2, 1fr);">
+                            <label class="meal-type-option">
+                                <input type="radio" name="lib-day-limit" value="none" checked>
+                                <span class="meal-badge-btn limit-none">制限なし</span>
+                            </label>
+                            <label class="meal-type-option">
+                                <input type="radio" name="lib-day-limit" value="sunday">
+                                <span class="meal-badge-btn limit-sunday">日曜日限定</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
                         <label for="lib-form-url" class="form-label">レシピのURL</label>
                         <input type="url" id="lib-form-url" class="form-input" placeholder="例: https://cookpad.com/... など">
                     </div>

@@ -286,6 +286,13 @@ function initEventListeners() {
     document.getElementById('btn-delete-lib').addEventListener('click', deleteCurrentLibDish);
     document.getElementById('lib-form').addEventListener('submit', saveLibForm);
     
+    document.getElementById('lib-form-title').addEventListener('input', (e) => {
+        if (e.target.value.includes('ハンバーグ')) {
+            const sundayRadio = document.querySelector('input[name="lib-day-limit"][value="sunday"]');
+            if (sundayRadio) sundayRadio.checked = true;
+        }
+    });
+    
     // Import file handle
     const fileInput = document.getElementById('import-file-input');
     const fileNameDisplay = document.getElementById('import-file-name');
@@ -1438,6 +1445,10 @@ function openLibModal(dishId) {
         document.getElementById('lib-form-notes').value = dish.notes || '';
         const radio = document.querySelector(`input[name="lib-meal-type"][value="${dish.type}"]`);
         if (radio) radio.checked = true;
+        
+        const dayLimitRadio = document.querySelector(`input[name="lib-day-limit"][value="${dish.sundayOnly ? 'sunday' : 'none'}"]`);
+        if (dayLimitRadio) dayLimitRadio.checked = true;
+        
         document.getElementById('btn-delete-lib').style.display = 'flex';
     } else {
         document.getElementById('lib-modal-title').textContent = '料理リストに登録';
@@ -1445,6 +1456,7 @@ function openLibModal(dishId) {
         document.getElementById('lib-form-url').value = '';
         document.getElementById('lib-form-notes').value = '';
         document.querySelector('input[name="lib-meal-type"][value="dinner"]').checked = true;
+        document.querySelector('input[name="lib-day-limit"][value="none"]').checked = true;
         document.getElementById('btn-delete-lib').style.display = 'none';
     }
     
@@ -1463,6 +1475,7 @@ function saveLibForm() {
     const url = document.getElementById('lib-form-url').value.trim();
     const notes = document.getElementById('lib-form-notes').value.trim();
     const type = document.querySelector('input[name="lib-meal-type"]:checked').value;
+    const sundayOnly = document.querySelector('input[name="lib-day-limit"]:checked').value === 'sunday';
     
     if (!title) return;
     
@@ -1470,14 +1483,14 @@ function saveLibForm() {
         // Update existing
         const idx = state.dishLibrary.findIndex(d => d.id === id);
         if (idx !== -1) {
-            state.dishLibrary[idx] = { ...state.dishLibrary[idx], title, type, url, notes };
+            state.dishLibrary[idx] = { ...state.dishLibrary[idx], title, type, url, notes, sundayOnly };
         }
     } else {
         // Add new
         const newDish = {
             id: `lib-${Date.now()}`,
             title, type, url, notes,
-            sundayOnly: title.includes('ハンバーグ')
+            sundayOnly
         };
         state.dishLibrary.push(newDish);
     }
