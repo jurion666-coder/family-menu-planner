@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>おうちの献立カレンダー - Family Menu Planner</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- App Container -->
+    <div class="app-container">
+        
+        <!-- Header -->
+        <header class="app-header animate-fade-in">
+            <div class="header-logo-section">
+                <div class="logo-icon-wrapper">
+                    <i data-lucide="utensils-crosses" class="logo-icon"></i>
+                </div>
+                <div>
+                    <h1 class="app-title">おうちの献立カレンダー</h1>
+                    <p class="app-subtitle">家族でおいしい時間をシェアしよう</p>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <!-- Search bar -->
+                <div class="search-box">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input type="text" id="menu-search" placeholder="料理名やメモを検索...">
+                </div>
+                
+                <!-- Year selector -->
+                <div class="year-selector-wrapper">
+                    <button id="prev-year" class="icon-btn-round" title="前年"><i data-lucide="chevron-left"></i></button>
+                    <span id="current-year" class="year-display">2026</span>
+                    <button id="next-year" class="icon-btn-round" title="翌年"><i data-lucide="chevron-right"></i></button>
+                </div>
+
+                <!-- Theme Toggle -->
+                <button id="theme-toggle" class="icon-btn-round action-btn" title="テーマ切り替え">
+                    <i data-lucide="moon" class="theme-icon-dark"></i>
+                    <i data-lucide="sun" class="theme-icon-light" style="display: none;"></i>
+                </button>
+                
+                <!-- Data Management -->
+                <button id="data-management-trigger" class="icon-btn-round action-btn" title="データの保存・読込">
+                    <i data-lucide="database"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs & View Mode -->
+        <div class="navigation-bar animate-fade-in delay-1">
+            <div class="view-tabs">
+                <button id="tab-year" class="tab-btn active">
+                    <i data-lucide="calendar-days"></i>
+                    <span>年間カレンダー</span>
+                </button>
+                <button id="tab-month" class="tab-btn">
+                    <i data-lucide="calendar"></i>
+                    <span>月間詳細</span>
+                </button>
+            </div>
+            
+            <div class="quick-info-bar">
+                <span class="info-badge" id="info-registered-count">
+                    <i data-lucide="chef-hat"></i> 登録済みの献立: <strong id="registered-count-val">0</strong>品
+                </span>
+                <button id="quick-add-btn" class="primary-btn">
+                    <i data-lucide="plus"></i> 献立を追加
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Workspace Grid -->
+        <main class="main-content animate-fade-in delay-2">
+            
+            <!-- Dashboard Left: Views -->
+            <div class="calendar-workspace">
+                
+                <!-- 1. Yearly View (12 Months Grid) -->
+                <section id="year-view" class="view-section active">
+                    <div class="months-grid">
+                        <!-- Dynamic generated 12 months cards will be injected here -->
+                    </div>
+                </section>
+                
+                <!-- 2. Monthly View (Large Grid) -->
+                <section id="month-view" class="view-section">
+                    <div class="month-navigation">
+                        <button id="month-prev" class="nav-month-btn"><i data-lucide="chevron-left"></i> 前の月</button>
+                        <h2 id="month-title-display" class="month-title">2026年 5月</h2>
+                        <button id="month-next" class="nav-month-btn">次の月 <i data-lucide="chevron-right"></i></button>
+                    </div>
+                    
+                    <div class="calendar-grid-wrapper">
+                        <!-- Weekdays Header -->
+                        <div class="weekdays-grid">
+                            <div class="weekday sun">日</div>
+                            <div class="weekday">月</div>
+                            <div class="weekday">火</div>
+                            <div class="weekday">水</div>
+                            <div class="weekday">木</div>
+                            <div class="weekday">金</div>
+                            <div class="weekday sat">土</div>
+                        </div>
+                        
+                        <!-- Days Grid -->
+                        <div id="month-days-grid" class="days-grid">
+                            <!-- Dynamic days will be injected here -->
+                        </div>
+                    </div>
+                </section>
+            </div>
+            
+            <!-- Dashboard Right: Sidebar (Shopping & Share List) -->
+            <aside class="sidebar-workspace">
+                
+                <!-- Shopping & Share Widget Card -->
+                <div class="widget-card glass">
+                    <div class="widget-header">
+                        <div class="widget-title">
+                            <i data-lucide="sparkles" class="accent-color"></i>
+                            <h3>おうちの献立サポート</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="widget-tabs">
+                        <button id="sidebar-tab-share" class="sidebar-tab active">家族にシェア</button>
+                        <button id="sidebar-tab-shopping" class="sidebar-tab">買い物リスト</button>
+                    </div>
+                    
+                    <!-- Tab Panel 1: Share menu to family -->
+                    <div id="panel-share" class="widget-panel active">
+                        <p class="panel-desc">今週・今月の献立をコピーして、LINEや家族のチャットに共有しましょう！</p>
+                        
+                        <div class="share-period-selector">
+                            <label for="share-range">期間を選択:</label>
+                            <select id="share-range" class="form-select">
+                                <option value="current-week">今週 (月〜日)</option>
+                                <option value="current-month">今月</option>
+                            </select>
+                        </div>
+
+                        <div class="textarea-container">
+                            <textarea id="share-text-output" readonly placeholder="献立が登録されると、自動的にテキストが生成されます。"></textarea>
+                            <button id="copy-share-btn" class="secondary-btn flex-center">
+                                <i data-lucide="copy"></i> <span>クリップボードにコピー</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Tab Panel 2: Auto Shopping List -->
+                    <div id="panel-shopping" class="widget-panel">
+                        <p class="panel-desc">献立のメモに書かれた「- キャベツ」「肉」などの食材を自動で抽出して、チェックリストを作ります。</p>
+                        
+                        <div class="shopping-actions">
+                            <div class="share-period-selector">
+                                <label for="shopping-range">期間:</label>
+                                <select id="shopping-range" class="form-select">
+                                    <option value="current-week">今週の献立から</option>
+                                    <option value="current-month">今月の献立から</option>
+                                </select>
+                            </div>
+                            <button id="shopping-add-item-btn" class="icon-btn-round" title="手動でアイテム追加"><i data-lucide="plus"></i></button>
+                        </div>
+
+                        <div class="shopping-list-container">
+                            <div class="shopping-input-row" style="display: none;" id="quick-shopping-input-row">
+                                <input type="text" id="new-shopping-item" placeholder="食材を追加...">
+                                <button id="save-shopping-item-btn" class="primary-btn btn-sm">追加</button>
+                            </div>
+
+                            <ul id="shopping-list-items" class="shopping-list">
+                                <!-- Dynamic shopping items will be injected here -->
+                                <li class="empty-shopping-state">献立のメモに「- 牛肉」や「- 玉ねぎ」のように入力すると、ここに自動で抽出されます！</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom Menu Rules Widget -->
+                <div class="widget-card glass rules-widget">
+                    <div class="widget-title">
+                        <i data-lucide="shield-check" class="success-color"></i>
+                        <h3>わが家の献立ルール</h3>
+                    </div>
+                    <ul class="rules-list">
+                        <li>
+                            <span class="rule-icon sunday">日</span>
+                            <span class="rule-text"><strong>ハンバーグは日曜日限定！</strong> 日曜以外に登録しようとすると優しく警告します。</span>
+                        </li>
+                        <li>
+                            <span class="rule-icon interval">7</span>
+                            <span class="rule-text"><strong>同じ料理は最低1週間（7日間）空ける！</strong> 献立のダブりを防ぎ、レパートリーを豊かにします。</span>
+                        </li>
+                        <li>
+                            <span class="rule-icon dish">1</span>
+                            <span class="rule-text"><strong>1日あたり1品（主役メニュー）</strong> をカレンダーにすっきりと美しく表示します。</span>
+                        </li>
+                    </ul>
+                </div>
+            </aside>
+        </main>
+        
+        <!-- Modal: Add / Edit Menu -->
+        <div id="menu-modal" class="modal-overlay">
+            <div class="modal-content glass animate-slide-up">
+                <button class="modal-close" id="modal-close-btn">&times;</button>
+                
+                <div class="modal-header">
+                    <div class="modal-icon-title">
+                        <i data-lucide="calendar-plus" class="modal-icon-color"></i>
+                        <h3 id="modal-title">献立を登録</h3>
+                    </div>
+                    <span id="modal-date-display" class="modal-date-tag">2026年 5月 25日 (月)</span>
+                </div>
+                
+                <form id="menu-form" onsubmit="return false;">
+                    <input type="hidden" id="form-date-key">
+                    
+                    <div class="form-group">
+                        <label for="form-title" class="form-label">料理名 <span class="required">*</span></label>
+                        <input type="text" id="form-title" class="form-input" placeholder="例: ハンバーグ、サバの味噌煮、和風パスタ" required autocomplete="off">
+                        
+                        <!-- Search Auto-suggestions -->
+                        <div id="title-suggestions" class="suggestions-list" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">食事のタイミング</label>
+                        <div class="meal-type-selector">
+                            <label class="meal-type-option">
+                                <input type="radio" name="meal-type" value="breakfast">
+                                <span class="meal-badge-btn breakfast">朝食</span>
+                            </label>
+                            <label class="meal-type-option">
+                                <input type="radio" name="meal-type" value="lunch">
+                                <span class="meal-badge-btn lunch">昼食</span>
+                            </label>
+                            <label class="meal-type-option">
+                                <input type="radio" name="meal-type" value="dinner" checked>
+                                <span class="meal-badge-btn dinner">夕食</span>
+                            </label>
+                            <label class="meal-type-option">
+                                <input type="radio" name="meal-type" value="snack">
+                                <span class="meal-badge-btn snack">おやつ</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="form-url" class="form-label">レシピのURL (他ページのURL)</label>
+                        <div class="url-input-wrapper">
+                            <input type="url" id="form-url" class="form-input" placeholder="例: https://cookpad.com/... などのリンク">
+                            <button type="button" id="btn-test-url" class="icon-btn-round" title="リンクを開いてテスト" disabled>
+                                <i data-lucide="external-link"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="form-notes" class="form-label">メモ・材料 (買い物リストに連動)</label>
+                        <textarea id="form-notes" class="form-textarea" placeholder="メモや買い物リストに載せたい食材を入力してください。
+例:
+- 合挽き肉 300g
+- 玉ねぎ 1個
+※ 行頭に「- 」を付けると自動で買い物リストに抽出されます！"></textarea>
+                    </div>
+
+                    <!-- Alert & Validation Messages Box -->
+                    <div id="form-validation-alerts" class="validation-alerts" style="display: none;">
+                        <!-- Dynamic error/warning messages go here -->
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="btn-delete-menu" class="danger-btn flex-center" style="display: none;">
+                            <i data-lucide="trash-2"></i> <span>削除する</span>
+                        </button>
+                        <div class="right-actions">
+                            <button type="button" id="btn-cancel-modal" class="secondary-btn">キャンセル</button>
+                            <button type="submit" id="btn-save-menu" class="primary-btn flex-center">
+                                <i data-lucide="save"></i> <span>保存する</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal: Data Management (Export / Import) -->
+        <div id="data-modal" class="modal-overlay">
+            <div class="modal-content glass animate-slide-up" style="max-width: 500px;">
+                <button class="modal-close" id="data-modal-close-btn">&times;</button>
+                
+                <div class="modal-header">
+                    <div class="modal-icon-title">
+                        <i data-lucide="database" class="modal-icon-color"></i>
+                        <h3>データのバックアップと共有</h3>
+                    </div>
+                </div>
+                
+                <div class="data-modal-body">
+                    <p class="body-desc">カレンダーの献立データをJSONファイルとして保存したり、家族間で共有するためにインポートすることができます。</p>
+                    
+                    <div class="data-action-section">
+                        <h4>1. データを書き出す (エクスポート)</h4>
+                        <p class="section-desc">現在のすべての献立データをファイルとして保存します。</p>
+                        <button id="btn-export-data" class="secondary-btn flex-center w-full">
+                            <i data-lucide="download"></i> <span>献立データをダウンロード (.json)</span>
+                        </button>
+                    </div>
+                    
+                    <div class="data-action-section">
+                        <h4>2. データを読み込む (インポート)</h4>
+                        <p class="section-desc">保存したJSONファイルを読み込み、カレンダーを復元します。<br><span class="warning-text">※現在のデータは上書きされますのでご注意ください。</span></p>
+                        
+                        <div class="file-upload-wrapper">
+                            <label for="import-file-input" class="file-upload-label flex-center">
+                                <i data-lucide="upload"></i> <span>ファイルを選択してインポート</span>
+                            </label>
+                            <input type="file" id="import-file-input" accept=".json" style="display: none;">
+                        </div>
+                        <span id="import-file-name" class="file-name-display">選択されたファイルはありません</span>
+                    </div>
+
+                    <div class="data-action-section">
+                        <h4>3. 初期デモデータの読み込み</h4>
+                        <p class="section-desc">初めての方用に、ルール（ハンバーグや1週間空けなど）に沿った美味しいデモデータを1週間分カレンダーにセットします。</p>
+                        <button id="btn-load-demo" class="accent-btn flex-center w-full">
+                            <i data-lucide="sparkles"></i> <span>デモデータを読み込む</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+    <!-- Custom JavaScript -->
+    <script src="app.js"></script>
+</body>
+</html>
