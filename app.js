@@ -1882,6 +1882,37 @@ function generateOneYearMenus(year) {
 // 18. FIREBASE CLOUD REAL-TIME SYNCHRONIZATION
 // ==========================================================================
 
+// Helper to write highly persistent cookie (expires in 10 years)
+function setFirebaseCookie(settings) {
+    try {
+        const text = JSON.stringify(settings);
+        const date = new Date();
+        date.setTime(date.getTime() + (10 * 365 * 24 * 60 * 60 * 1000));
+        const expires = "; expires=" + date.toUTCString();
+        document.cookie = "family_menu_planner_firebase_settings=" + encodeURIComponent(text) + expires + "; path=/; SameSite=Lax";
+    } catch (e) {
+        console.error("Failed to write cookie:", e);
+    }
+}
+
+// Helper to read cookie
+function getFirebaseCookie() {
+    try {
+        const nameEQ = "family_menu_planner_firebase_settings=";
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) {
+                return decodeURIComponent(c.substring(nameEQ.length, c.length));
+            }
+        }
+    } catch (e) {
+        console.error("Failed to read cookie:", e);
+    }
+    return null;
+}
+
 function initFirebase() {
     if (!window.firebase) {
         console.warn("Firebase SDK is not loaded.");
@@ -1889,7 +1920,16 @@ function initFirebase() {
         return;
     }
     
-    const saved = localStorage.getItem('family_menu_planner_firebase_settings');
+    // Dual check: Load from localStorage first, fallback to highly persistent cookie
+    let saved = localStorage.getItem('family_menu_planner_firebase_settings');
+    if (!saved) {
+        saved = getFirebaseCookie();
+        if (saved) {
+            // Restore to localStorage to keep them in sync
+            localStorage.setItem('family_menu_planner_firebase_settings', saved);
+        }
+    }
+    
     if (!saved) {
         updateFirebaseUI(false);
         return;
@@ -2024,6 +2064,7 @@ function saveFirebaseSettings() {
         };
         
         localStorage.setItem('family_menu_planner_firebase_settings', JSON.stringify(settings));
+        setFirebaseCookie(settings); // Save to highly persistent cookie too
         showToastNotification("Firebaseの設定を保存しました。接続します...");
         
         initFirebase();
@@ -2041,6 +2082,8 @@ function saveFirebaseSettings() {
 function disableFirebaseSettings() {
     if (confirm("クラウド自動同期を停止しますか？\n（停止してもこれまでのデータはローカルに保存されたまま残ります）")) {
         localStorage.removeItem('family_menu_planner_firebase_settings');
+        // Clear highly persistent cookie
+        document.cookie = "family_menu_planner_firebase_settings=; Max-Age=-99999999; path=/; SameSite=Lax";
         showToastNotification("クラウド自動同期を停止しました。");
         
         // Reload page to clean connection
