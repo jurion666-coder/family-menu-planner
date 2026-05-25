@@ -195,6 +195,10 @@ function initEventListeners() {
         openMenuModal(getDateKey(targetDate));
     });
     
+    // Auto-Gen Buttons in Navigation Bar
+    document.getElementById('nav-generate-month').addEventListener('click', generateOneMonthMenusClick);
+    document.getElementById('nav-generate-year').addEventListener('click', generateOneYearMenusClick);
+    
     // Modal controls
     document.getElementById('modal-close-btn').addEventListener('click', closeMenuModal);
     document.getElementById('btn-cancel-modal').addEventListener('click', closeMenuModal);

@@ -76,11 +76,17 @@
                 </button>
             </div>
             
-            <div class="quick-info-bar">
-                <span class="info-badge" id="info-registered-count">
+            <div class="quick-info-bar" style="flex-wrap: wrap; gap: 8px;">
+                <span class="info-badge" id="info-registered-count" style="margin-right: 4px;">
                     <i data-lucide="chef-hat"></i> 登録済みの献立: <strong id="registered-count-val">0</strong>品
                 </span>
-                <button id="quick-add-btn" class="primary-btn">
+                <button id="nav-generate-month" class="secondary-btn flex-center" style="padding: 8px 14px; font-size: 0.8rem; height: 38px; border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light);">
+                    <i data-lucide="calendar" style="width: 14px; height: 14px;"></i> 1ヶ月自動生成
+                </button>
+                <button id="nav-generate-year" class="secondary-btn flex-center" style="padding: 8px 14px; font-size: 0.8rem; height: 38px; border-color: var(--color-secondary); color: var(--color-secondary); background: var(--color-secondary-light);">
+                    <i data-lucide="chef-hat" style="width: 14px; height: 14px;"></i> 1年間自動生成
+                </button>
+                <button id="quick-add-btn" class="primary-btn" style="height: 38px;">
                     <i data-lucide="plus"></i> 献立を追加
                 </button>
             </div>
