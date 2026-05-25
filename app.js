@@ -17,6 +17,11 @@ let state = {
     theme: 'light'
 };
 
+// Firebase global synchronization variables
+let firebaseApp = null;
+let firebaseDb = null;
+let isFirebaseSyncing = false;
+
 // Japanese day-of-week helper
 const JP_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 const MONTH_NAMES_EN = [
@@ -77,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     loadStateFromStorage();
     initEventListeners();
+    initFirebase();
     
     // If no menus exist, load a few demo menus for a beautiful first look
     if (Object.keys(state.menus).length === 0) {
@@ -127,6 +133,7 @@ function saveStateToStorage() {
         currentMonth: state.currentMonth
     };
     localStorage.setItem('family_menu_planner_data', JSON.stringify(dataToSave));
+    syncLocalStateToFirebase();
 }
 
 // 5. THEME TOGGLE
@@ -296,6 +303,10 @@ function initEventListeners() {
             if (sundayRadio) sundayRadio.checked = true;
         }
     });
+    
+    // Firebase Cloud Sync Controls
+    document.getElementById('btn-save-firebase').addEventListener('click', saveFirebaseSettings);
+    document.getElementById('btn-disable-firebase').addEventListener('click', disableFirebaseSettings);
     
     // Import file handle
     const fileInput = document.getElementById('import-file-input');
@@ -1865,4 +1876,198 @@ function generateOneYearMenus(year) {
     closeDataModal();
     
     showToastNotification(`${year}年（${totalDays}日分）の献立を全自動生成しました！🥗`);
+}
+
+// ==========================================================================
+// 18. FIREBASE CLOUD REAL-TIME SYNCHRONIZATION
+// ==========================================================================
+
+function initFirebase() {
+    if (!window.firebase) {
+        console.warn("Firebase SDK is not loaded.");
+        updateFirebaseUI(false);
+        return;
+    }
+    
+    const saved = localStorage.getItem('family_menu_planner_firebase_settings');
+    if (!saved) {
+        updateFirebaseUI(false);
+        return;
+    }
+    
+    try {
+        const settings = JSON.parse(saved);
+        if (!settings.config || !settings.familyId) {
+            updateFirebaseUI(false);
+            return;
+        }
+        
+        // Initialize firebase app if not already initialized
+        if (firebase.apps.length === 0) {
+            firebaseApp = firebase.initializeApp(settings.config);
+        } else {
+            firebaseApp = firebase.app();
+        }
+        firebaseDb = firebase.database();
+        
+        updateFirebaseUI(true, settings.familyId, settings.configText);
+        
+        // Set up cloud listeners
+        const familyRef = firebaseDb.ref('families/' + settings.familyId);
+        
+        // Initial load and listen for real-time changes
+        familyRef.on('value', (snapshot) => {
+            if (isFirebaseSyncing) return; // ignore updates triggered by ourselves
+            
+            const data = snapshot.val();
+            if (data) {
+                isFirebaseSyncing = true;
+                
+                // Deep merge or overwrite state
+                state.menus = data.menus || {};
+                state.dishLibrary = data.dishLibrary || [];
+                state.shoppingList = data.shoppingList || [];
+                
+                // Save locally too as backup
+                const dataToSave = {
+                    menus: state.menus,
+                    shoppingList: state.shoppingList,
+                    dishLibrary: state.dishLibrary,
+                    currentYear: state.currentYear,
+                    currentMonth: state.currentMonth
+                };
+                localStorage.setItem('family_menu_planner_data', JSON.stringify(dataToSave));
+                
+                // Re-render current active view
+                if (state.viewMode === 'year') renderYearView();
+                else if (state.viewMode === 'month') renderMonthView();
+                else if (state.viewMode === 'library') renderLibraryView();
+                
+                updateRegisteredCount();
+                generateShareText();
+                generateShoppingList();
+                
+                isFirebaseSyncing = false;
+                console.log("Real-time data synced from Firebase cloud!");
+            } else {
+                // Database is empty, push our current local state to cloud first!
+                syncLocalStateToFirebase();
+            }
+        });
+        
+    } catch (e) {
+        console.error("Firebase init failed:", e);
+        const statusMsg = document.getElementById('firebase-status-msg');
+        if (statusMsg) statusMsg.innerHTML = `<span style="color:var(--color-danger);">⚠️ 接続失敗: 設定エラー</span>`;
+    }
+}
+
+function syncLocalStateToFirebase() {
+    if (!firebaseDb) return;
+    
+    const saved = localStorage.getItem('family_menu_planner_firebase_settings');
+    if (!saved) return;
+    
+    try {
+        const settings = JSON.parse(saved);
+        const familyId = settings.familyId;
+        
+        isFirebaseSyncing = true;
+        
+        firebaseDb.ref('families/' + familyId).set({
+            menus: state.menus,
+            dishLibrary: state.dishLibrary,
+            shoppingList: state.shoppingList
+        }).then(() => {
+            isFirebaseSyncing = false;
+            console.log("Local state successfully pushed to Firebase cloud.");
+        }).catch(err => {
+            isFirebaseSyncing = false;
+            console.error("Failed to push to Firebase:", err);
+        });
+    } catch (e) {
+        isFirebaseSyncing = false;
+        console.error(e);
+    }
+}
+
+function saveFirebaseSettings() {
+    let configText = document.getElementById('firebase-config-input').value.trim();
+    const familyId = document.getElementById('firebase-family-id').value.trim();
+    
+    if (!configText || !familyId) {
+        alert("Firebase構成情報と家族グループIDの両方を入力してください。");
+        return;
+    }
+    
+    try {
+        // Smart cleanup: if they copied the whole "const firebaseConfig = { ... };" block, extract just the { ... }
+        if (configText.includes('{')) {
+            const startIdx = configText.indexOf('{');
+            const endIdx = configText.lastIndexOf('}');
+            if (endIdx > startIdx) {
+                configText = configText.substring(startIdx, endIdx + 1);
+            }
+        }
+        
+        // Bulletproof JS object parser (handles single quotes, unquoted keys, trailing commas)
+        const config = new Function("return " + configText)();
+        
+        if (!config || typeof config !== 'object' || !config.databaseURL) {
+            throw new Error("Invalid config object or missing databaseURL");
+        }
+        
+        const settings = {
+            config: config,
+            configText: JSON.stringify(config, null, 2), // store normalized JSON
+            familyId: familyId
+        };
+        
+        localStorage.setItem('family_menu_planner_firebase_settings', JSON.stringify(settings));
+        showToastNotification("Firebaseの設定を保存しました。接続します...");
+        
+        initFirebase();
+        
+        // Immediately trigger sync
+        setTimeout(() => {
+            syncLocalStateToFirebase();
+        }, 1000);
+        
+    } catch (e) {
+        alert("Firebase構成情報の解析に失敗しました。コピー＆ペーストした内容が正しいかご確認ください。\n\nコピーする部分：\nconst firebaseConfig = { ... } の「{」から「}」までの部分です。");
+    }
+}
+
+function disableFirebaseSettings() {
+    if (confirm("クラウド自動同期を停止しますか？\n（停止してもこれまでのデータはローカルに保存されたまま残ります）")) {
+        localStorage.removeItem('family_menu_planner_firebase_settings');
+        showToastNotification("クラウド自動同期を停止しました。");
+        
+        // Reload page to clean connection
+        setTimeout(() => {
+            location.reload();
+        }, 1000);
+    }
+}
+
+function updateFirebaseUI(enabled, familyId = '', configText = '') {
+    const statusMsg = document.getElementById('firebase-status-msg');
+    const saveBtnText = document.querySelector('#btn-save-firebase span');
+    const disableBtn = document.getElementById('btn-disable-firebase');
+    const configInput = document.getElementById('firebase-config-input');
+    const familyIdInput = document.getElementById('firebase-family-id');
+    
+    if (enabled) {
+        if (statusMsg) statusMsg.innerHTML = `<span style="color:var(--color-secondary);">🟢 接続中: ${familyId} グループで同期中</span>`;
+        if (saveBtnText) saveBtnText.textContent = "設定を更新する";
+        if (disableBtn) disableBtn.style.display = "block";
+        if (configInput) configInput.value = configText;
+        if (familyIdInput) familyIdInput.value = familyId;
+    } else {
+        if (statusMsg) statusMsg.innerHTML = `ステータス: 未接続 (ローカル保存中)`;
+        if (saveBtnText) saveBtnText.textContent = "クラウド同期を有効化する";
+        if (disableBtn) disableBtn.style.display = "none";
+        if (configInput) configInput.value = "";
+        if (familyIdInput) familyIdInput.value = "";
+    }
 }

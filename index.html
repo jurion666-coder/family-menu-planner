@@ -383,6 +383,36 @@
                         </div>
                         <span class="warning-text" style="font-size: 0.72rem; display: block; text-align: center; margin-top: 8px;">※選択している対象月・対象年の既存データは上書きされます。</span>
                     </div>
+
+                    <div class="data-action-section" style="border-top: 2px dashed var(--color-primary); padding-top: 20px; margin-top: 10px;">
+                        <h4 style="color: var(--color-primary); display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="cloud-lightning" style="width: 18px; height: 18px;"></i>
+                            <span>5. 【プレミアム機能】クラウド自動同期 (Firebase)</span>
+                        </h4>
+                        <p class="section-desc">無料のFirebase Realtime Databaseを連携して、スマホやPC間で自動・リアルタイム同期を行います。プライベートな家族専用のクラウドデータベースが作成されます。</p>
+                        
+                        <div class="form-group" style="margin-top: 8px;">
+                            <label for="firebase-config-input" class="form-label" style="font-size: 0.72rem; font-weight: 700;">Firebase構成情報 (JSON)</label>
+                            <textarea id="firebase-config-input" class="form-textarea" style="height: 100px; font-size: 0.7rem; font-family: monospace; line-height: 1.3;" placeholder='{\n  "apiKey": "AIzaSy...",\n  "databaseURL": "https://...",\n  "projectId": "...",\n  ...\n}'></textarea>
+                        </div>
+                        
+                        <div class="form-group" style="margin-top: 6px;">
+                            <label for="firebase-family-id" class="form-label" style="font-size: 0.72rem; font-weight: 700;">家族グループID (任意の半角英数字)</label>
+                            <input type="text" id="firebase-family-id" class="form-input" style="font-size: 0.72rem; padding: 6px 10px;" placeholder="例: tanaka-family-2026">
+                        </div>
+                        
+                        <div class="auto-gen-buttons-row" style="margin-top: 8px;">
+                            <button id="btn-save-firebase" class="primary-btn flex-center w-full" style="background-color: var(--color-primary); padding: 10px 14px; font-size: 0.8rem; border-radius: var(--radius-sm);">
+                                <i data-lucide="cloud-lightning"></i> <span>クラウド同期を有効化する</span>
+                            </button>
+                        </div>
+                        <button id="btn-disable-firebase" class="danger-btn flex-center w-full" style="display: none; padding: 8px 14px; font-size: 0.8rem; margin-top: 8px; border-radius: var(--radius-sm); width: 100%;">
+                            <i data-lucide="cloud-off"></i> <span>クラウド同期を停止する</span>
+         </button>
+                        <span id="firebase-status-msg" style="font-size: 0.7rem; display: block; text-align: center; margin-top: 8px; font-weight: 700; color: var(--text-muted);">
+                            ステータス: 未接続 (ローカル保存中)
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -473,6 +503,10 @@
 
     </div>
     
+    <!-- Firebase Compatibility SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
     <!-- Custom JavaScript -->
     <script src="app.js"></script>
 </body>
