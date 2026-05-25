@@ -1169,7 +1169,16 @@ function generateShoppingList() {
     });
     
     state.shoppingList = combined;
-    saveStateToStorage();
+    
+    // Save to localStorage only (prevents infinite Firebase write-listen loops during real-time sync)
+    const dataToSave = {
+        menus: state.menus,
+        shoppingList: state.shoppingList,
+        dishLibrary: state.dishLibrary,
+        currentYear: state.currentYear,
+        currentMonth: state.currentMonth
+    };
+    localStorage.setItem('family_menu_planner_data', JSON.stringify(dataToSave));
     
     // Render list
     listContainer.innerHTML = '';
