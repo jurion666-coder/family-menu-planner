@@ -1971,11 +1971,24 @@ function initFirebase() {
             const data = snapshot.val();
             if (data) {
                 isFirebaseSyncing = true;
+                let needsCloudPush = false;
                 
-                // Deep merge or overwrite state
-                state.menus = data.menus || {};
-                state.dishLibrary = data.dishLibrary || [];
-                state.shoppingList = data.shoppingList || [];
+                // Deep merge or overwrite state defensively (prevent old schemas from wiping newer local nodes)
+                if (data.menus !== undefined) {
+                    state.menus = data.menus || {};
+                }
+                
+                // CRITICAL: Protect local dishLibrary from being wiped by older cloud schemas
+                if (data.dishLibrary !== undefined) {
+                    state.dishLibrary = data.dishLibrary || [];
+                } else if (state.dishLibrary && state.dishLibrary.length > 0) {
+                    // Cloud has no library node, but local does! Keep local and prepare to upload
+                    needsCloudPush = true;
+                }
+                
+                if (data.shoppingList !== undefined) {
+                    state.shoppingList = data.shoppingList || [];
+                }
                 
                 // Save locally too as backup
                 const dataToSave = {
@@ -1998,6 +2011,13 @@ function initFirebase() {
                 
                 isFirebaseSyncing = false;
                 console.log("Real-time data synced from Firebase cloud!");
+                
+                if (needsCloudPush) {
+                    console.log("Preserving local dishLibrary and uploading schema to Firebase cloud...");
+                    setTimeout(() => {
+                        syncLocalStateToFirebase();
+                    }, 800);
+                }
             } else {
                 // Database is empty, push our current local state to cloud first!
                 syncLocalStateToFirebase();
