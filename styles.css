@@ -2025,3 +2025,9 @@ textarea#share-text-output {
         padding: 16px;
     }
 }
+
+/* Prevent background scrolling when popup modal is open on smartphones */
+body.modal-open {
+    overflow: hidden;
+    height: 100vh;
+}

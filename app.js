@@ -660,6 +660,7 @@ function createDayCell(date, isCurrentMonth, dayNum) {
 
 // 10. MODAL HANDLING & VALIDATION
 function openMenuModal(dateKey) {
+    document.body.classList.add('modal-open');
     state.currentDateKey = dateKey;
     
     const [year, month, day] = dateKey.split('-').map(Number);
@@ -712,6 +713,7 @@ function openMenuModal(dateKey) {
 }
 
 function closeMenuModal() {
+    document.body.classList.remove('modal-open');
     document.getElementById('menu-modal').classList.remove('active');
 }
 
@@ -856,10 +858,13 @@ function triggerValidation() {
 
 // 11. DATA MODAL & BACKUP HANDLERS
 function openDataModal() {
+    document.body.classList.add('modal-open');
     document.getElementById('data-modal').classList.add('active');
 }
 
+// Close and sync when shutting modal
 function closeDataModal() {
+    document.body.classList.remove('modal-open');
     document.getElementById('data-modal').classList.remove('active');
 }
 
@@ -1457,6 +1462,7 @@ function renderLibraryView() {
 }
 
 function openLibModal(dishId) {
+    document.body.classList.add('modal-open');
     const modal = document.getElementById('lib-modal');
     document.getElementById('lib-form-id').value = dishId || '';
     
@@ -1490,6 +1496,7 @@ function openLibModal(dishId) {
 }
 
 function closeLibModal() {
+    document.body.classList.remove('modal-open');
     document.getElementById('lib-modal').classList.remove('active');
 }
 
