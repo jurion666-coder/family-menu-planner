@@ -21,6 +21,8 @@ let state = {
 let firebaseApp = null;
 let firebaseDb = null;
 let isFirebaseSyncing = false;
+let hasReceivedInitialSync = false;
+
 
 // Japanese day-of-week helper
 const JP_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
@@ -307,6 +309,17 @@ function initEventListeners() {
     // Firebase Cloud Sync Controls
     document.getElementById('btn-save-firebase').addEventListener('click', saveFirebaseSettings);
     document.getElementById('btn-disable-firebase').addEventListener('click', disableFirebaseSettings);
+    
+    // Manual Reload / Re-sync button
+    document.getElementById('app-reload-btn').addEventListener('click', () => {
+        const icon = document.querySelector('#app-reload-btn i');
+        if (icon) icon.classList.add('spin-animation');
+        showToastNotification("最新の献立データを同期・再読み込み中...");
+        
+        setTimeout(() => {
+            location.reload();
+        }, 800);
+    });
     
     // Import file handle
     const fileInput = document.getElementById('import-file-input');
@@ -1958,6 +1971,8 @@ function initFirebase() {
             return;
         }
         
+        hasReceivedInitialSync = false; // Reset on connect/switch
+        
         // Initialize firebase app if not already initialized
         if (firebase.apps.length === 0) {
             firebaseApp = firebase.initializeApp(settings.config);
@@ -1976,58 +1991,68 @@ function initFirebase() {
             if (isFirebaseSyncing) return; // ignore updates triggered by ourselves
             
             const data = snapshot.val();
-            if (data) {
-                isFirebaseSyncing = true;
-                let needsCloudPush = false;
-                
-                // Deep merge or overwrite state defensively (prevent old schemas from wiping newer local nodes)
-                if (data.menus !== undefined) {
+            try {
+                if (data) {
+                    isFirebaseSyncing = true;
+                    let needsCloudPush = false;
+                    
+                    // Deep merge or overwrite state defensively (prevent old schemas from wiping newer local nodes)
+                    // menus has always existed, so if undefined, it simply means it is empty!
                     state.menus = data.menus || {};
-                }
-                
-                // CRITICAL: Protect local dishLibrary from being wiped by older cloud schemas
-                if (data.dishLibrary !== undefined) {
-                    state.dishLibrary = data.dishLibrary || [];
-                } else if (state.dishLibrary && state.dishLibrary.length > 0) {
-                    // Cloud has no library node, but local does! Keep local and prepare to upload
-                    needsCloudPush = true;
-                }
-                
-                if (data.shoppingList !== undefined) {
+                    
+                    // CRITICAL: Protect local dishLibrary from being wiped by older cloud schemas
+                    if (data.schemaVersion >= 2) {
+                        // This is a v2 schema, so if dishLibrary is undefined, it means it is empty!
+                        state.dishLibrary = data.dishLibrary || [];
+                    } else {
+                        // Old schema, protect local dishLibrary!
+                        if (data.dishLibrary !== undefined) {
+                            state.dishLibrary = data.dishLibrary || [];
+                        } else if (state.dishLibrary && state.dishLibrary.length > 0) {
+                            // Cloud has no library node, but local does! Keep local and prepare to upload
+                            needsCloudPush = true;
+                        }
+                    }
+                    
                     state.shoppingList = data.shoppingList || [];
+                    
+                    // Save locally too as backup
+                    const dataToSave = {
+                        menus: state.menus,
+                        shoppingList: state.shoppingList,
+                        dishLibrary: state.dishLibrary,
+                        currentYear: state.currentYear,
+                        currentMonth: state.currentMonth
+                    };
+                    localStorage.setItem('family_menu_planner_data', JSON.stringify(dataToSave));
+                    
+                    // Re-render current active view
+                    if (state.viewMode === 'year') renderYearView();
+                    else if (state.viewMode === 'month') renderMonthView();
+                    else if (state.viewMode === 'library') renderLibraryView();
+                    
+                    updateRegisteredCount();
+                    generateShareText();
+                    generateShoppingList();
+                    
+                    console.log("Real-time data synced from Firebase cloud!");
+                    hasReceivedInitialSync = true; // Sync complete, enable local changes pushing
+                    
+                    if (needsCloudPush) {
+                        console.log("Preserving local dishLibrary and uploading schema to Firebase cloud...");
+                        setTimeout(() => {
+                            syncLocalStateToFirebase();
+                        }, 800);
+                    }
+                } else {
+                    // Database is empty, push our current local state to cloud first!
+                    hasReceivedInitialSync = true; // Mark sync as done so syncLocalStateToFirebase isn't blocked
+                    syncLocalStateToFirebase();
                 }
-                
-                // Save locally too as backup
-                const dataToSave = {
-                    menus: state.menus,
-                    shoppingList: state.shoppingList,
-                    dishLibrary: state.dishLibrary,
-                    currentYear: state.currentYear,
-                    currentMonth: state.currentMonth
-                };
-                localStorage.setItem('family_menu_planner_data', JSON.stringify(dataToSave));
-                
-                // Re-render current active view
-                if (state.viewMode === 'year') renderYearView();
-                else if (state.viewMode === 'month') renderMonthView();
-                else if (state.viewMode === 'library') renderLibraryView();
-                
-                updateRegisteredCount();
-                generateShareText();
-                generateShoppingList();
-                
+            } catch (err) {
+                console.error("Error in Firebase listener:", err);
+            } finally {
                 isFirebaseSyncing = false;
-                console.log("Real-time data synced from Firebase cloud!");
-                
-                if (needsCloudPush) {
-                    console.log("Preserving local dishLibrary and uploading schema to Firebase cloud...");
-                    setTimeout(() => {
-                        syncLocalStateToFirebase();
-                    }, 800);
-                }
-            } else {
-                // Database is empty, push our current local state to cloud first!
-                syncLocalStateToFirebase();
             }
         });
         
@@ -2040,6 +2065,10 @@ function initFirebase() {
 
 function syncLocalStateToFirebase() {
     if (!firebaseDb) return;
+    if (!hasReceivedInitialSync) {
+        console.log("Firebase sync deferred: Waiting for initial download from cloud.");
+        return;
+    }
     
     const saved = localStorage.getItem('family_menu_planner_firebase_settings');
     if (!saved) return;
@@ -2053,7 +2082,8 @@ function syncLocalStateToFirebase() {
         firebaseDb.ref('families/' + familyId).set({
             menus: state.menus,
             dishLibrary: state.dishLibrary,
-            shoppingList: state.shoppingList
+            shoppingList: state.shoppingList,
+            schemaVersion: 2 // mark as schema v2 (supports dishLibrary & handles empty deletes)
         }).then(() => {
             isFirebaseSyncing = false;
             console.log("Local state successfully pushed to Firebase cloud.");
